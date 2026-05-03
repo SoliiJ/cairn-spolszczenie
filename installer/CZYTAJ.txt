@@ -1,0 +1,54 @@
+Cairn — Spolszczenie (nieoficjalne)
+====================================
+
+Co to jest:
+-----------
+Pełna polonizacja gry Cairn (The Game Bakers), podmieniająca teksty
+angielskie i fonty na wersję polską. Polonizacja działa, gdy w grze
+masz ustawiony język ANGIELSKI (English) — to jedyny sposób, by gra
+załadowała polskie pliki bez modyfikowania katalogu Addressables.
+
+Instalacja:
+-----------
+1. Zamknij Cairn (jeśli jest uruchomione).
+2. Uruchom plik "Zainstaluj.bat" (dwa razy klik).
+3. Skrypt automatycznie wykryje folder gry (Steam) i zrobi kopię
+   zapasową oryginalnych plików, a potem wgra polonizację.
+4. W grze, w "Settings -> Language", upewnij się, że wybrany jest
+   "English" — wtedy zobaczysz teksty po polsku.
+
+Jeśli skrypt nie wykryje gry, podaj ścieżkę ręcznie:
+   powershell -ExecutionPolicy Bypass -File Install-CairnPL.ps1 -GamePath "G:\Sciezka\do\Cairn"
+
+Odinstalowanie:
+---------------
+Uruchom "Odinstaluj.bat" — przywróci oryginalne pliki z kopii zapasowej.
+
+Aktualizacje gry:
+-----------------
+Gdy Steam zaktualizuje Cairn, instalator wykryje, że oryginalne pliki
+gry zmieniły się względem zapisanej kopii zapasowej i zapyta, czy
+nadpisać backup nowym oryginałem przed wgraniem polonizacji. Wystarczy
+ponownie uruchomić "Zainstaluj.bat".
+
+Co robi polonizator:
+--------------------
+- Podmienia plik:
+  Cairn_Data\StreamingAssets\aa\StandaloneWindows64\localizationen_assets_all.bundle
+  (zawiera angielskie teksty -> polskie tłumaczenie)
+- Podmienia plik:
+  Cairn_Data\StreamingAssets\aa\StandaloneWindows64\dynamicfontsen_assets_all.bundle
+  (włącza dynamiczny atlas TextMeshPro, by font generował polskie znaki
+  z osadzonej w grze TTF, która już zawiera glify ąćęłńóśźż)
+
+Bezpieczeństwo:
+---------------
+- Nie modyfikuje plików gry poza dwoma paczkami opisanymi powyżej.
+- Wszystkie modyfikacje są odwracalne przez "Odinstaluj.bat".
+- Nie wymaga uprawnień administratora (chyba że gra jest w katalogu chronionym).
+
+Wsparcie / problemy:
+--------------------
+Polonizacja jest fan-made, niezwiązana z The Game Bakers. Jeśli po
+aktualizacji gry pojawią się problemy z tekstem, uruchom "Odinstaluj.bat",
+zaczekaj na nową wersję polonizacji i ponownie zainstaluj.

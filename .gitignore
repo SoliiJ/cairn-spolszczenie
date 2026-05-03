@@ -1,0 +1,46 @@
+# ---------------------------------------------------------------------------
+# Pliki gry / wytworzone artefakty (nie publikujemy — należą do The Game Bakers)
+# ---------------------------------------------------------------------------
+source/
+build/
+dist/
+work/
+installer/payload/
+installer/manifest.json
+*.bundle
+
+# ---------------------------------------------------------------------------
+# Pomocnicze pliki tłumaczeniowe (regenerowane z strings_pl.json)
+# ---------------------------------------------------------------------------
+translations/chunks_en/
+translations/strings_en.json
+translations/strings_en.csv
+translations/_diff.json
+translations/_remaining.json
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+.python-version
+
+# ---------------------------------------------------------------------------
+# IDE / OS
+# ---------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ---------------------------------------------------------------------------
+# Claude Code (lokalne ustawienia)
+# ---------------------------------------------------------------------------
+.claude/
+CLAUDE.md
+claude.md
