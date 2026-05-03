@@ -1,12 +1,11 @@
+﻿# =============================================================================
+# Cairn — build + instalacja w jednym kroku (dla uzytkownikow z GitHuba)
 # =============================================================================
-# Cairn — build + instalacja w jednym kroku
-# =============================================================================
-# Skrypt dla użytkowników, którzy sklonowali repozytorium z GitHuba.
-# Repozytorium NIE zawiera plików gry (z powodów prawnych) — ten skrypt:
-#   1. wyszuka instalację Cairn ze Steam,
-#   2. zbuduje spolszczone paczki .bundle z tłumaczeń (translations/strings_pl.json)
-#      bezpośrednio na podstawie Twojej legalnej kopii gry,
-#   3. zainstaluje je z kopią zapasową oryginałów.
+# Repozytorium NIE zawiera plikow gry (prawa autorskie The Game Bakers).
+# Ten skrypt:
+#   1. wyszuka instalacje Cairn ze Steam,
+#   2. zbuduje spolszczone paczki .bundle z Twojego legalnego egzemplarza gry,
+#   3. zainstaluje je z kopia zapasowa oryginalow.
 #
 # Wymagania: Python 3.8+ (https://www.python.org/downloads/)
 # =============================================================================
@@ -18,116 +17,167 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RepoRoot = Split-Path -Parent $ScriptDir
+$RepoRoot  = Split-Path -Parent $ScriptDir
 
 function Write-Step($m) { Write-Host "[*] $m" -ForegroundColor Cyan }
 function Write-OK($m)   { Write-Host "[+] $m" -ForegroundColor Green }
+function Write-Warn($m) { Write-Host "[!] $m" -ForegroundColor Yellow }
 function Write-Err($m)  { Write-Host "[x] $m" -ForegroundColor Red }
 
-Write-Host ""
-Write-Host "===========================================" -ForegroundColor Magenta
-Write-Host " Cairn — kompilacja i instalacja PL" -ForegroundColor Magenta
-Write-Host "===========================================" -ForegroundColor Magenta
-Write-Host ""
-
-# 1. Sprawdź Pythona
-Write-Step "Sprawdzam Pythona..."
-try {
-    $py = (& python --version 2>&1)
-    Write-OK "Python: $py"
-} catch {
-    Write-Err "Python nie jest zainstalowany lub nie jest w PATH."
-    Write-Host "Pobierz: https://www.python.org/downloads/  (zaznacz 'Add to PATH' przy instalacji)"
+function Pause-Then-Exit($code) {
+    Write-Host ""
+    Write-Host "Nacisnij Enter, aby zamknac..."
     [void][System.Console]::ReadLine()
-    exit 1
+    exit $code
 }
 
-# 2. Zainstaluj UnityPy jeśli brak
-Write-Step "Sprawdzam zależności (UnityPy)..."
-$installed = & python -c "import UnityPy" 2>&1
-if ($LASTEXITCODE -ne 0) {
-    Write-Step "UnityPy nie jest zainstalowane — instaluję..."
-    & python -m pip install --user UnityPy
-    if ($LASTEXITCODE -ne 0) { throw "Nie udało się zainstalować UnityPy." }
-}
-Write-OK "UnityPy gotowe."
-
-# 3. Wykryj grę
-. "$ScriptDir\Install-CairnPL.ps1" -GamePath $GamePath -ErrorAction SilentlyContinue *> $null
-# Powyższe nie jest dot-source, tylko żeby ewentualnie zwalić na default. Pójdziemy własną ścieżką:
-
-if (-not $GamePath) {
-    Write-Step "Wykrywanie instalacji Cairn..."
-    $candidates = @()
-    $steamRoot = (Get-ItemProperty -Path "HKCU:\Software\Valve\Steam" -ErrorAction SilentlyContinue).SteamPath
-    if (-not $steamRoot) {
-        $steamRoot = (Get-ItemProperty -Path "HKLM:\SOFTWARE\WOW6432Node\Valve\Steam" -ErrorAction SilentlyContinue).InstallPath
+function Find-CairnPath([string]$hint) {
+    if ($hint -and (Test-Path (Join-Path $hint "Cairn.exe"))) {
+        return (Resolve-Path $hint).Path
     }
+
+    $candidates = New-Object System.Collections.Generic.List[string]
+
+    $steamRoot = $null
+    foreach ($key in @("HKCU:\Software\Valve\Steam", "HKLM:\SOFTWARE\WOW6432Node\Valve\Steam", "HKLM:\SOFTWARE\Valve\Steam")) {
+        $p = (Get-ItemProperty -Path $key -ErrorAction SilentlyContinue)
+        if ($p) {
+            if ($p.SteamPath)   { $steamRoot = $p.SteamPath; break }
+            if ($p.InstallPath) { $steamRoot = $p.InstallPath; break }
+        }
+    }
+
     if ($steamRoot) {
-        $candidates += $steamRoot
+        $candidates.Add($steamRoot)
         $vdf = Join-Path $steamRoot "steamapps\libraryfolders.vdf"
         if (Test-Path $vdf) {
             $content = Get-Content $vdf -Raw
-            $matches = [regex]::Matches($content, '"path"\s+"([^"]+)"')
-            foreach ($mt in $matches) { $candidates += $mt.Groups[1].Value.Replace('\\','\') }
+            $rxMatches = [regex]::Matches($content, '"path"\s+"([^"]+)"')
+            foreach ($mt in $rxMatches) {
+                $candidates.Add($mt.Groups[1].Value.Replace('\\','\'))
+            }
         }
     }
-    foreach ($drive in (Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -gt 0 })) {
-        $try1 = Join-Path $drive.Root "SteamLibrary"
-        if (Test-Path $try1) { $candidates += $drive.Root }
+
+    foreach ($drive in (Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free })) {
+        $try = Join-Path $drive.Root "SteamLibrary"
+        if (Test-Path $try) { $candidates.Add($try) }
     }
-    foreach ($lib in $candidates | Sort-Object -Unique) {
-        $p1 = Join-Path $lib "steamapps\common\Cairn"
-        $p2 = Join-Path $lib "SteamLibrary\steamapps\common\Cairn"
-        foreach ($p in @($p1, $p2)) {
-            if (Test-Path (Join-Path $p "Cairn.exe")) { $GamePath = $p; break }
+
+    foreach ($lib in ($candidates | Sort-Object -Unique)) {
+        foreach ($p in @( (Join-Path $lib "steamapps\common\Cairn"), (Join-Path $lib "common\Cairn") )) {
+            if (Test-Path (Join-Path $p "Cairn.exe")) { return $p }
         }
-        if ($GamePath) { break }
     }
+    return $null
 }
 
-if (-not $GamePath -or -not (Test-Path (Join-Path $GamePath "Cairn.exe"))) {
-    Write-Err "Nie znaleziono instalacji Cairn. Uruchom z parametrem: -GamePath ""C:\Sciezka\do\Cairn"""
-    [void][System.Console]::ReadLine()
-    exit 1
-}
-
-Write-OK "Wykryto Cairn: $GamePath"
-$gameBundleDir = Join-Path $GamePath "Cairn_Data\StreamingAssets\aa\StandaloneWindows64"
-
-# 4. Skopiuj oryginalne paczki do source/ (tylko lokalnie, jako wsad do builda)
-Write-Step "Kopiuję oryginalne paczki gry do snapshotu..."
-$srcDir = Join-Path $RepoRoot "source"
-if (-not (Test-Path $srcDir)) { New-Item -ItemType Directory -Path $srcDir | Out-Null }
-$bundles = @("localizationen_assets_all.bundle", "dynamicfontsen_assets_all.bundle", "dynamicfonts_assets_all.bundle")
-foreach ($b in $bundles) {
-    $src = Join-Path $gameBundleDir $b
-    if (-not (Test-Path $src)) { throw "Brak pliku w grze: $src" }
-    Copy-Item -Path $src -Destination $srcDir -Force
-}
-Write-OK "Snapshot gotowy."
-
-# 5. Zbuduj paczki
-Write-Step "Buduję paczkę z tekstami PL..."
-Push-Location $RepoRoot
 try {
-    & python "scripts\build_pl_bundle.py"
-    if ($LASTEXITCODE -ne 0) { throw "build_pl_bundle.py zwrócił błąd" }
-    & python "scripts\build_pl_fonts.py"
-    if ($LASTEXITCODE -ne 0) { throw "build_pl_fonts.py zwrócił błąd" }
-}
-finally { Pop-Location }
-Write-OK "Paczki zbudowane w build/."
+    Write-Host ""
+    Write-Host "===========================================" -ForegroundColor Magenta
+    Write-Host " Cairn - kompilacja i instalacja PL" -ForegroundColor Magenta
+    Write-Host "===========================================" -ForegroundColor Magenta
+    Write-Host ""
 
-# 6. Skopiuj zbudowane paczki do payloadu i wywołaj instalator
-Write-Step "Przygotowuję payload..."
-$payloadDir = Join-Path $ScriptDir "payload"
-if (-not (Test-Path $payloadDir)) { New-Item -ItemType Directory -Path $payloadDir | Out-Null }
-foreach ($b in @("localizationen_assets_all.bundle", "dynamicfontsen_assets_all.bundle")) {
-    Copy-Item -Path (Join-Path $RepoRoot "build\$b") -Destination $payloadDir -Force
-}
-Write-OK "Payload gotowy."
+    # 1. Sprawdz Pythona
+    Write-Step "Sprawdzam Pythona..."
+    $pyOk = $false
+    foreach ($cmd in @("python", "py")) {
+        $pyExe = Get-Command $cmd -ErrorAction SilentlyContinue
+        if ($pyExe) {
+            try {
+                $ver = & $cmd --version 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Write-OK "$cmd : $ver"
+                    $script:PYTHON = $cmd
+                    $pyOk = $true
+                    break
+                }
+            } catch { }
+        }
+    }
+    if (-not $pyOk) {
+        Write-Err "Python nie jest zainstalowany lub nie jest w PATH."
+        Write-Host "Pobierz: https://www.python.org/downloads/"
+        Write-Host "Przy instalacji ZAZNACZ 'Add Python to PATH'."
+        Pause-Then-Exit 1
+    }
 
-Write-Step "Uruchamiam instalator..."
-& "$ScriptDir\Install-CairnPL.ps1" -GamePath $GamePath -Force
-exit $LASTEXITCODE
+    # 2. Zainstaluj UnityPy jesli brak
+    Write-Step "Sprawdzam UnityPy..."
+    & $PYTHON -c "import UnityPy" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Step "Instaluje UnityPy (pip install --user UnityPy)..."
+        & $PYTHON -m pip install --user UnityPy
+        if ($LASTEXITCODE -ne 0) {
+            Write-Err "Nie udalo sie zainstalowac UnityPy."
+            Pause-Then-Exit 1
+        }
+    }
+    Write-OK "UnityPy gotowe."
+
+    # 3. Wykryj gre
+    Write-Step "Wykrywanie instalacji Cairn..."
+    $game = Find-CairnPath $GamePath
+    if (-not $game) {
+        Write-Err "Nie znaleziono instalacji Cairn."
+        Write-Host "Uruchom rownie z parametrem:"
+        Write-Host "  Build-And-Install.ps1 -GamePath ""C:\Sciezka\do\Cairn"""
+        Pause-Then-Exit 1
+    }
+    Write-OK "Wykryto Cairn: $game"
+
+    $gameBundleDir = Join-Path $game "Cairn_Data\StreamingAssets\aa\StandaloneWindows64"
+
+    # 4. Skopiuj oryginalne paczki do source/ (lokalnie, wsad do builda)
+    Write-Step "Kopiuje oryginalne paczki gry..."
+    $srcDir = Join-Path $RepoRoot "source"
+    if (-not (Test-Path $srcDir)) { New-Item -ItemType Directory -Path $srcDir | Out-Null }
+    $bundles = @("localizationen_assets_all.bundle", "dynamicfontsen_assets_all.bundle", "dynamicfonts_assets_all.bundle")
+    foreach ($b in $bundles) {
+        $src = Join-Path $gameBundleDir $b
+        if (-not (Test-Path $src)) {
+            Write-Err "Brak pliku w grze: $src"
+            Pause-Then-Exit 1
+        }
+        Copy-Item -Path $src -Destination $srcDir -Force
+    }
+    Write-OK "Snapshot gotowy."
+
+    # 5. Zbuduj paczki (dwa kroki)
+    Write-Step "Buduje paczke z tekstami PL..."
+    Push-Location $RepoRoot
+    try {
+        & $PYTHON "scripts\build_pl_bundle.py"
+        if ($LASTEXITCODE -ne 0) { throw "build_pl_bundle.py: blad" }
+        & $PYTHON "scripts\build_pl_fonts.py"
+        if ($LASTEXITCODE -ne 0) { throw "build_pl_fonts.py: blad" }
+    }
+    finally { Pop-Location }
+    Write-OK "Paczki zbudowane."
+
+    # 6. Wstaw do payloadu
+    Write-Step "Przygotowuje payload..."
+    $payloadDir = Join-Path $ScriptDir "payload"
+    if (-not (Test-Path $payloadDir)) { New-Item -ItemType Directory -Path $payloadDir | Out-Null }
+    foreach ($b in @("localizationen_assets_all.bundle", "dynamicfontsen_assets_all.bundle")) {
+        Copy-Item -Path (Join-Path $RepoRoot "build\$b") -Destination $payloadDir -Force
+    }
+    Write-OK "Payload gotowy."
+
+    # 7. Wywolaj instalator
+    Write-Step "Uruchamiam instalator..."
+    & "$ScriptDir\Install-CairnPL.ps1" -GamePath $game -Force
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "Instalator zwrocil blad."
+        Pause-Then-Exit 1
+    }
+    Pause-Then-Exit 0
+}
+catch {
+    Write-Err $_.Exception.Message
+    Write-Host ""
+    Write-Host "Stack trace:" -ForegroundColor DarkGray
+    Write-Host $_.ScriptStackTrace -ForegroundColor DarkGray
+    Pause-Then-Exit 1
+}

@@ -235,12 +235,16 @@ try {
 }
 catch {
     Write-Err $_.Exception.Message
-    Write-Host ""
-    Write-Host "Naciśnij Enter, aby zamknąć..."
-    [void][System.Console]::ReadLine()
+    if (-not $Force) {
+        Write-Host ""
+        Write-Host "Naciśnij Enter, aby zamknąć..."
+        [void][System.Console]::ReadLine()
+    }
     exit 1
 }
 
-Write-Host ""
-Write-Host "Naciśnij Enter, aby zamknąć..."
-[void][System.Console]::ReadLine()
+if (-not $Force) {
+    Write-Host ""
+    Write-Host "Naciśnij Enter, aby zamknąć..."
+    [void][System.Console]::ReadLine()
+}
