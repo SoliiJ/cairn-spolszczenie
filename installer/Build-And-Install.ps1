@@ -7,7 +7,9 @@
 #   2. zbuduje spolszczone paczki .bundle z Twojego legalnego egzemplarza gry,
 #   3. zainstaluje je z kopia zapasowa oryginalow.
 #
-# Wymagania: Python 3.8+ (https://www.python.org/downloads/)
+# Wymagania: Python 3.9 - 3.13 (https://www.python.org/downloads/)
+# UWAGA: Python 3.14 nie jest jeszcze obslugiwany przez UnityPy na Windows
+# (brak prekompilowanych paczek dla zaleznosci jak Pillow / texture2ddecoder).
 # =============================================================================
 
 [CmdletBinding()]
@@ -101,6 +103,28 @@ try {
         Write-Host "Pobierz: https://www.python.org/downloads/"
         Write-Host "Przy instalacji ZAZNACZ 'Add Python to PATH'."
         Pause-Then-Exit 1
+    }
+
+    # 1b. Sprawdz wersje Pythona (UnityPy nie ma jeszcze paczek dla 3.14 na Windows)
+    $pyVer = & $PYTHON -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
+    if ($LASTEXITCODE -eq 0 -and $pyVer) {
+        $parts = $pyVer.Trim().Split('.')
+        $major = [int]$parts[0]
+        $minor = [int]$parts[1]
+        if ($major -ne 3 -or $minor -lt 9 -or $minor -gt 13) {
+            Write-Err "Wykryto Python $pyVer. Wymagany jest Python 3.9 - 3.13."
+            Write-Host ""
+            Write-Host "Python 3.14 (i nowsze) nie ma jeszcze prekompilowanych paczek"
+            Write-Host "dla UnityPy na Windows - pip probuje kompilowac ze zrodel i konczy"
+            Write-Host "sie tracebackiem (brak kompilatora MSVC)."
+            Write-Host ""
+            Write-Host "Rozwiazanie:"
+            Write-Host "  1. Odinstaluj obecnego Pythona (Panel sterowania -> Programy)."
+            Write-Host "  2. Pobierz Pythona 3.13.x z https://www.python.org/downloads/"
+            Write-Host "  3. Przy instalacji ZAZNACZ 'Add Python to PATH'."
+            Write-Host "  4. Uruchom Zbuduj-i-zainstaluj.bat ponownie."
+            Pause-Then-Exit 1
+        }
     }
 
     # 2. Zainstaluj UnityPy jesli brak
